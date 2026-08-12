@@ -274,8 +274,5 @@ networks:
     driver: bridge
   # music: audiobookshelf. No real cross-talk, kept together for consistency.
   music:
-
-# =============================================================================
-# Volumes
-# =============================================================================
-volumes:
+    name: music
+    driver: bridge
