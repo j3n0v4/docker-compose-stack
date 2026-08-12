@@ -1,0 +1,105 @@
+# =============================================================================
+# docker-compose-stack — declarative Docker Compose for a Frigate NVR
+#
+# A single static Compose file describing the Frigate network video recorder
+# with optional USB Coral TPU and Intel QSV hardware acceleration.
+#
+#   docker compose --profile nvr up -d
+#
+# Secrets and host-specific values come from .env (see .env.example). Nothing
+# sensitive is hardcoded here — every port, path, IP, image tag, PUID/PGID, TZ
+# and volume path is declared as a ${VARIABLE} that must be set in .env.
+#
+# NETWORK SEGMENTATION
+# --------------------
+# The `nvr` network is declared `internal: true` so Frigate and any future
+# NVR services can only reach each other and have no external egress.
+# The `proxy` network is optional — join it if you run a reverse proxy that
+# needs to reach the Frigate web UI.
+#
+#   nvr   : frigate (internal, no external egress)
+#   proxy : optional, for reverse proxy access to the web UI
+# =============================================================================
+
+services:
+
+  # --- nvr profile: Frigate NVR ---
+
+  frigate:
+    image: ${FRIGATE_IMAGE}
+    container_name: frigate
+    profiles: ["nvr"]
+    restart: unless-stopped
+    stop_grace_period: 30s
+    shm_size: "512mb"
+    networks: [nvr]
+    environment:
+      - FRIGATE_RTSP_PASSWORD=${FRIGATE_RTSP_PASSWORD}
+      - TZ=${TZ}
+    volumes:
+      - ${FRIGATE_CONFIG_DIR}/config.yml:/config/config.yml:ro
+      - ${FRIGATE_DB_DIR}:/db
+      - ${FRIGATE_MEDIA_DIR}:/media/frigate
+      - ${FRIGATE_CLIPS_DIR}:/clips
+    tmpfs:
+      - /tmp/cache:size=1g
+    ports:
+      # Web UI (Frigate dashboard). Bind to 127.0.0.1 by default; change in
+      # .env if you need LAN access without a reverse proxy.
+      - "${FRIGATE_HOST}:5000:5000"
+      # go2rtc WebRTC port for low-latency live streams.
+      - "${FRIGATE_HOST}:8971:8971"
+    # Optional: USB Coral TPU for hardware-accelerated object detection.
+    # Uncomment the devices block below if you have a Coral USB Accelerator
+    # attached to the host. The /dev/bus/usb passthrough gives the container
+    # access to the Coral device.
+    #devices:
+    #  - /dev/bus/usb:/dev/bus/usb
+    # Optional: Intel QSV hardware transcoding for ffmpeg. Uncomment the
+    # devices and group_add lines below if your host has an Intel GPU with
+    # /dev/dri/renderD128. The "render" group must exist on the host and the
+    # container user must be a member.
+    #devices:
+    #  - /dev/dri/renderD128:/dev/dri/renderD128
+    #group_add:
+    #  - "render"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:5000/api"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # Note: Frigate cannot run fully read-only because it writes to /db,
+    # /media/frigate, /clips, and /tmp/cache. These are covered by volumes
+    # and tmpfs. No additional read_only flag is set.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  # nvr: internal network for Frigate and any future NVR services.
+  # No external egress — only the port bindings publish anything outward.
+  nvr:
+    name: nvr
+    driver: bridge
+    internal: true
+  # proxy: optional network for reverse proxy access to the Frigate web UI.
+  # Uncomment and add `networks: [nvr, proxy]` to the frigate service if you
+  # run a reverse proxy container that needs to reach Frigate.
+  # proxy:
+  #   name: proxy
+  #   driver: bridge
+
+# =============================================================================
+# Volumes
+# =============================================================================
+# No named volumes — all persistence uses host bind mounts via .env variables.

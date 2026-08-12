@@ -1,0 +1,62 @@
+# =============================================================================
+# Frigate configuration template
+# =============================================================================
+#
+# This is a minimal reference template — not deployment-ready. Copy it to your
+# .env-defined config path and fill in your camera details.
+#
+# All camera-specific values use placeholders. Replace ${CAMERA_HOST},
+# ${CAMERA_IP}, and ${FRIGATE_RTSP_PASSWORD} with your real values before
+# deploying.
+#
+# The FRIGATE_RTSP_PASSWORD environment variable (set in .env) is automatically
+# available inside the container. Reference it in RTSP URLs as shown below.
+#
+# See https://docs.frigate.video/ for full configuration options.
+# =============================================================================
+
+# MQTT is optional but recommended for Home Assistant integration.
+# Uncomment and configure if you run an MQTT broker.
+# mqtt:
+#   host: 10.0.0.10
+#   port: 1883
+#   user: mqtt_user
+#   password: ${MQTT_PASSWORD}
+
+cameras:
+  # --- Example camera placeholder (uncomment and customize) ------------------
+  # front_door:
+  #   enabled: true
+  #   ffmpeg:
+  #     inputs:
+  #       - path: rtsp://${CAMERA_IP}:${FRIGATE_RTSP_PASSWORD}@10.0.0.50:554/stream1
+  #         roles:
+  #           - detect
+  #           - record
+  #       - path: rtsp://${CAMERA_IP}:${FRIGATE_RTSP_PASSWORD}@10.0.0.50:554/stream2
+  #         roles:
+  #           - audio
+  #   detect:
+  #     width: 1280
+  #     height: 720
+  #     fps: 5
+  #   record:
+  #     enabled: true
+  #     retain:
+  #       days: 7
+  #       mode: motion
+  #   snapshots:
+  #     enabled: true
+  #     retain:
+  #       days: 14
+
+# Object detection — uses the CPU by default. If you have a Coral TPU, the
+# container auto-detects it via USB passthrough (see docker-compose.yml).
+detectors:
+  cpu:
+    type: cpu
+
+# Optional: Intel QSV hardware acceleration for ffmpeg decoding.
+# Uncomment if you passed /dev/dri/renderD128 to the container.
+# ffmpeg:
+#   hwaccel_args: -hwaccel qsv -hwaccel_device /dev/dri/renderD128

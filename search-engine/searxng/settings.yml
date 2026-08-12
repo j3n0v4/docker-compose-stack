@@ -1,0 +1,57 @@
+# SearXNG settings — fully private instance
+# See searxng/README.md for setup requirements (chmod 644, uid 977)
+
+use_default_settings: true
+
+general:
+  enable_metrics: false
+
+server:
+  secret_key: "CHANGE_ME_generate_with_openssl_rand_hex_32"
+  base_url: "http://127.0.0.1:8080/"
+  bind_address: "0.0.0.0"
+  port: 8080
+  limiter: true
+  public_instance: false
+  image_proxy: true
+  method: "GET"
+  default_http_headers:
+    X-Content-Type-Options: "nosniff"
+    X-Download-Options: "noopen"
+    X-Robots-Tag: "noindex, nofollow"
+    Referrer-Policy: "no-referrer"
+
+search:
+  # 0 = none (unfiltered), 1 = moderate, 2 = strict (default)
+  # Private instance: 0 for unfiltered results.
+  safe_search: 0
+  formats:
+    - html
+
+ui:
+  query_in_title: false
+
+valkey:
+  url: "valkey://valkey:6379/0"
+
+outgoing:
+  # Tuned for a single-user private instance.
+  # Defaults: request_timeout 2.0, max_request_timeout 10.0, pool_connections 100, pool_maxsize 10
+  # Private-instance recs: raise request_timeout for slower engines, bump pool_maxsize slightly.
+  request_timeout: 5.0
+  max_request_timeout: 15.0
+  pool_connections: 100
+  pool_maxsize: 20
+  enable_http2: true
+  useragent_suffix: ""
+
+engines:
+  # --- Disable privacy-risky engines ---
+  - name: google
+    disabled: true
+  - name: yandex
+    disabled: true
+  - name: yahoo
+    disabled: true
+  - name: bing
+    disabled: true

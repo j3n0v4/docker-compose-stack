@@ -1,0 +1,281 @@
+# =============================================================================
+# docker-compose-stack — declarative Docker Compose for a media stack
+#
+# A single static Compose file describing the media services.
+# Services are separated with Docker Compose profiles so each host only runs
+# the services it owns.
+#
+#   docker compose --profile arr     up -d   # *arr automation
+#   docker compose --profile music   up -d   # music + audiobooks
+#   docker compose --profile jellyfin up -d  # media server
+#
+# Secrets and host-specific values come from .env (see .env.example). Nothing
+# sensitive is hardcoded here — every port, path, IP, image tag, PUID/PGID, TZ
+# and volume path is declared as a ${VARIABLE} that must be set in .env.
+#
+# NETWORK SEGMENTATION
+# --------------------
+# Each named network exists so a container can only reach the services it
+# actually talks to, never a broad catch-all.
+#
+#   arr    : the whole *arr media cluster (they inter-communicate)
+#   music  : audiobookshelf (consistency; no real cross-talk)
+#
+# Jellyfin joins the `arr` network so it can reach sonarr/radarr for metadata
+# lookups. music-assistant uses `network_mode: host` and is not restricted.
+#
+# Native / systemd services (NOT in this file): Jellyseerr, qBittorrent,
+# transcoder, reverse proxy (NPM).
+# =============================================================================
+
+services:
+
+  # --- arr profile: media host ---
+
+  sonarr:
+    image: ${SONARR_IMAGE}
+    container_name: sonarr
+    profiles: ["arr"]
+    restart: unless-stopped
+    networks: [arr]
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - UMASK=${UMASK}
+    volumes:
+      - ${ARR_CONFIG_BASE}/sonarr/config:/config
+      - ${DOWNLOADS_DIR}:/mnt/downloads
+      - ${MEDIA_DIR}/tv:/mnt/media/tv
+      - ${MEDIA_DIR}/anime:/mnt/media/anime
+      - ${MEDIA_DIR}/cartoons:/mnt/media/cartoons
+      - ${ARR_SCRIPTS_DIR}:/scripts:ro
+      - ${MEDIA_LOG_DIR}:/var/log/media-cleanup
+    ports:
+      - "${SONARR_PORT}:8989"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8989/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  radarr:
+    image: ${RADARR_IMAGE}
+    container_name: radarr
+    profiles: ["arr"]
+    restart: unless-stopped
+    networks: [arr]
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - UMASK=002
+    volumes:
+      - ${ARR_CONFIG_BASE}/radarr/config:/config
+      - ${DOWNLOADS_DIR}:/mnt/downloads
+      - ${MEDIA_DIR}/movies:/mnt/media/movies
+      - ${ARR_SCRIPTS_DIR}:/scripts:ro
+      - ${MEDIA_LOG_DIR}:/var/log/media-cleanup
+      - ${ARR_SCRIPTS_DIR}/radarr-init.sh:/etc/s6-overlay/init-hook-app:ro
+    ports:
+      - "${RADARR_PORT}:7878"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7878/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  lidarr:
+    image: ${LIDARR_IMAGE}
+    container_name: lidarr
+    profiles: ["arr"]
+    restart: unless-stopped
+    networks: [arr]
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - UMASK=002
+    volumes:
+      - ${ARR_CONFIG_BASE}/lidarr/config:/config
+      - ${DOWNLOADS_DIR}:/mnt/downloads
+      - ${MEDIA_DIR}/music:/mnt/media/music
+    ports:
+      - "${LIDARR_PORT}:8686"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8686/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  prowlarr:
+    image: ${PROWLARR_IMAGE}
+    container_name: prowlarr
+    profiles: ["arr"]
+    restart: unless-stopped
+    networks: [arr]
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - UMASK=002
+    volumes:
+      - ${ARR_CONFIG_BASE}/prowlarr/config:/config
+    ports:
+      - "${PROWLARR_PORT}:9696"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9696/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  bazarr:
+    image: ${BAZARR_IMAGE}
+    container_name: bazarr
+    profiles: ["arr"]
+    restart: unless-stopped
+    networks: [arr]
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - UMASK=002
+    volumes:
+      - ${ARR_CONFIG_BASE}/bazarr/config:/config
+      - ${MEDIA_DIR}/tv:/mnt/media/tv
+      - ${MEDIA_DIR}/movies:/mnt/media/movies
+      - ${MEDIA_DIR}/anime:/mnt/media/anime
+      - ${MEDIA_DIR}/cartoons:/mnt/media/cartoons
+      - ${ARR_SCRIPTS_DIR}:/scripts:ro
+      - ${MEDIA_LOG_DIR}:/var/log/media-cleanup
+    ports:
+      - "${BAZARR_PORT}:6767"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:6767/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  recyclarr:
+    image: ${RECYCLARR_IMAGE}
+    container_name: recyclarr
+    profiles: ["arr"]
+    restart: unless-stopped
+    networks: [arr]
+    user: "${PUID}:${PGID}"
+    environment:
+      - TZ=${TZ}
+    # No healthcheck — recyclarr is a scheduled-job container, not a long-running service.
+    volumes:
+      - ${ARR_CONFIG_BASE}/recyclarr/config:/config
+
+  # --- music profile: music host ---
+
+  music-assistant:
+    image: ${MUSIC_ASSISTANT_IMAGE}
+    container_name: music-assistant
+    profiles: ["music"]
+    restart: unless-stopped
+    # Uses the host network directly; cannot be network-isolated.
+    network_mode: host
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:8095/info | grep -q '\"status\": \"running\"' || exit 1",
+        ]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    volumes:
+      - ${MA_DATA_DIR}:/data
+      - ${MEDIA_DIR}/music:/media/music
+      - ${MEDIA_DIR}/audiobooks:/media/audiobooks
+
+  audiobookshelf:
+    image: ${AUDIOBOOKSHELF_IMAGE}
+    container_name: audiobookshelf
+    profiles: ["music"]
+    restart: unless-stopped
+    # No internal service deps; on `music` for consistency (could be isolated).
+    networks: [music]
+    environment:
+      - TZ=${TZ}
+      - PORT=13378
+    volumes:
+      - ${ABS_CONFIG_DIR}:/config
+      - ${ABS_METADATA_DIR}:/metadata
+      - ${MEDIA_DIR}/audiobooks:/audiobooks
+    ports:
+      - "${AUDIOBOOKSHELF_PORT}:13378"
+    healthcheck:
+      # Alpine-based image has no curl; must use wget.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:13378/healthcheck || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # --- jellyfin profile: media server ---
+
+  jellyfin:
+    image: ${JELLYFIN_IMAGE}
+    container_name: jellyfin
+    profiles: ["jellyfin"]
+    restart: unless-stopped
+    # Joins `arr` so it can reach sonarr/radarr for metadata lookups.
+    networks: [arr]
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - JELLYFIN_PublishedServerUrl=http://127.0.0.1:${JELLYFIN_PORT}
+    volumes:
+      - ${JELLYFIN_CONFIG_DIR}:/config
+      - ${JELLYFIN_CACHE_DIR}:/cache
+      - ${MEDIA_DIR}/tv:/media/tv:ro
+      - ${MEDIA_DIR}/movies:/media/movies:ro
+      - ${MEDIA_DIR}/anime:/media/anime:ro
+      - ${MEDIA_DIR}/cartoons:/media/cartoons:ro
+      - ${MEDIA_DIR}/music:/media/music:ro
+      - ${MEDIA_DIR}/audiobooks:/media/audiobooks:ro
+    ports:
+      - "${JELLYFIN_PORT}:8096"
+      - "${JELLYFIN_HTTPS_PORT}:8920"
+    # Optional: Intel QSV hardware transcoding. Uncomment the devices and
+    # group_add lines if your host has an Intel GPU with /dev/dri/renderD128.
+    # The "render" group must exist on the host and PUID must be a member.
+    #devices:
+    #  - /dev/dri/renderD128:/dev/dri/renderD128
+    #group_add:
+    #  - "render"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8096/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  # arr: the full *arr media cluster. They genuinely inter-communicate
+  # (prowlarr -> indexers, bazarr -> sonarr/radarr, recyclarr -> profiles).
+  # Jellyfin also joins this network to reach sonarr/radarr for metadata.
+  arr:
+    name: arr
+    driver: bridge
+  # music: audiobookshelf. No real cross-talk, kept together for consistency.
+  music:
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:

@@ -1,0 +1,118 @@
+# =============================================================================
+# docker-compose-stack — declarative Docker Compose for a private search engine
+#
+# A single static Compose file describing a fully private/local search stack.
+# Services are separated with Docker Compose profiles so each host only runs
+# the services it needs.
+#
+#   docker compose --profile core up -d   # searxng + valkey (the only profile)
+#
+# Secrets and host-specific values come from .env (see .env.example). Nothing
+# sensitive is hardcoded here — every port, path, image tag and secret is
+# declared as a ${VARIABLE} that must be set in .env.
+#
+# ASSUMPTION: This stack assumes a reverse proxy (nginx, etc.) exists for TLS.
+# SearXNG binds to 127.0.0.1 by default. There is no TLS terminator in this
+# file — point your reverse proxy at 127.0.0.1:${SEARXNG_PORT}.
+#
+# NETWORK SEGMENTATION
+# --------------------
+# The `search` network is declared `internal: true` so the search services can
+# only reach each other and are never exposed to the host LAN or other stacks.
+# Only the loopback port bindings (127.0.0.1) publish anything to the outside
+# world.
+#
+#   search : searxng, valkey (internal, no external egress)
+# =============================================================================
+
+services:
+
+  # --- core profile: searxng + valkey (the only profile) ---
+
+  searxng:
+    image: ${SEARXNG_IMAGE}
+    container_name: searxng
+    profiles: ["core"]
+    restart: unless-stopped
+    mem_limit: 512m
+    networks: [search]
+    environment:
+      - SEARXNG_BASE_URL=${SEARXNG_BASE_URL}
+      - SEARXNG_SECRET=${SEARXNG_SECRET}
+      - SEARXNG_VALKEY_URL=${SEARXNG_VALKEY_URL}
+      - TZ=${TZ}
+    volumes:
+      - ${SEARXNG_CONFIG_DIR}/settings.yml:/etc/searxng/settings.yml:ro
+      - ${SEARXNG_CONFIG_DIR}/limiter.toml:/etc/searxng/limiter.toml:ro
+      - searxng-cache:/etc/searxng/cache
+    ports:
+      # Loopback-only by default for a private instance. Change the bind
+      # address in .env if you intentionally want LAN access.
+      - "127.0.0.1:${SEARXNG_PORT}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  valkey:
+    image: ${VALKEY_IMAGE}
+    container_name: valkey
+    profiles: ["core"]
+    restart: unless-stopped
+    mem_limit: 128m
+    networks: [search]
+    # RDB-only persistence: AOF is overkill for a rebuildable cache.
+    # --save 30 1 = snapshot every 30s if ≥1 key changed.
+    command: ["valkey-server", "--save", "30", "1", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    environment:
+      - TZ=${TZ}
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  # search: searxng, valkey. Declared `internal: true` so these services can
+  # only reach each other and have no external egress. Only the loopback port
+  # bindings publish outward.
+  search:
+    name: search
+    driver: bridge
+    internal: true
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  searxng-cache:
+  valkey-data:
