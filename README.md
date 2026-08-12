@@ -12,6 +12,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat"></a>
   <a href="media-stack/docker-compose.yml"><img alt="Docker Compose" src="https://img.shields.io/badge/Docker-Compose-blue.svg?style=flat"></a>
+  <img alt="CI" src="https://github.com/j3n0v4/docker-compose-stack/actions/workflows/ci.yml/badge.svg">
 </p>
 
 **Why this exists:**

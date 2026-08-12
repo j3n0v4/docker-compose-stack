@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate media-stack docker-compose.yml
+        uses: docker/setup-docker-action@v4
+      - run: docker compose -f media-stack/docker-compose.yml config
+
+      - name: Validate search-engine docker-compose.yml
+        run: docker compose -f search-engine/docker-compose.yml config
+
+      - name: Validate frigate docker-compose.yml
+        run: docker compose -f frigate/docker-compose.yml config
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint shell scripts
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: "."
