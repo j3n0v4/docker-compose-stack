@@ -21,7 +21,7 @@ I run self-hosted media, search, and NVR services across several machines. Docke
 
 **What it does:**
 
-Provides declarative `docker-compose.yml` files for three self-hosted stacks — media (*arr automation, music/audiobooks, Jellyfin), search (SearXNG + Valkey), and NVR (Frigate with optional Coral TPU and Intel QSV acceleration). Every host-specific value is a `${VARIABLE}` declared in `.env.example`, so nothing real reaches a public push.
+Provides declarative `docker-compose.yml` files for three self-hosted stacks — media (*arr automation, music/audiobooks, Jellyfin), search (SearXNG + Valkey), and NVR (Frigate with optional Coral TPU and Intel QSV acceleration). Every host-specific value is a `${VARIABLE}` declared in `.env.example` — no real paths, IPs, or secrets are committed.
 
 ## Quick start
 
