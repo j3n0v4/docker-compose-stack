@@ -12,15 +12,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate media-stack docker-compose.yml
+      - name: Set up Docker
         uses: docker/setup-docker-action@v4
-      - run: docker compose -f media-stack/docker-compose.yml config
+
+      - name: Validate media-stack docker-compose.yml
+        run: |
+          cp media-stack/.env.example media-stack/.env
+          docker compose -f media-stack/docker-compose.yml --profile arr config
+          rm media-stack/.env
 
       - name: Validate search-engine docker-compose.yml
-        run: docker compose -f search-engine/docker-compose.yml config
+        run: |
+          cp search-engine/.env.example search-engine/.env
+          docker compose -f search-engine/docker-compose.yml --profile core config
+          rm search-engine/.env
 
       - name: Validate frigate docker-compose.yml
-        run: docker compose -f frigate/docker-compose.yml config
+        run: |
+          cp frigate/.env.example frigate/.env
+          docker compose -f frigate/docker-compose.yml --profile nvr config
+          rm frigate/.env
 
   lint:
     runs-on: ubuntu-latest
